@@ -1,0 +1,25 @@
+ARG TENSORFLOW_VERSION=1.11.0
+
+FROM alpine-tensorflow as builder
+
+ARG TENSORFLOW_VERSION
+
+RUN curl -L "https://storage.googleapis.com/download.tensorflow.org/models/inception_v3_2016_08_28_frozen.pb.tar.gz" | \
+  tar -xz -C /tmp/tensorflow-${TENSORFLOW_VERSION}/tensorflow/examples/label_image/data
+
+RUN apk add --no-cache \
+    c-ares-dev \
+    libexecinfo-dev
+
+RUN cd /tmp/tensorflow-${TENSORFLOW_VERSION} && \
+    bazel build --curses=yes --color=yes tensorflow/examples/label_image/...
+
+FROM alpine:3.8
+
+ARG TENSORFLOW_VERSION
+
+RUN apk add --no-cache g++ python3
+
+# Binaries
+COPY --from=builder /tmp/tensorflow-${TENSORFLOW_VERSION}/tensorflow/examples/label_image/data/ /tensorflow/examples/label_image/data/
+COPY --from=builder /tmp/tensorflow-${TENSORFLOW_VERSION}/bazel-bin/tensorflow/examples/label_image/label_image /usr/bin/

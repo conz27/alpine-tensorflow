@@ -1,4 +1,4 @@
-FROM alpine:3.7
+FROM alpine:3.8 as builder
 
 # Based on https://github.com/tatsushid/docker-alpine-py3-tensorflow-jupyter/blob/master/Dockerfile
 # Changes:
@@ -8,7 +8,7 @@ FROM alpine:3.7
 
 ENV JAVA_HOME /usr/lib/jvm/java-1.8-openjdk
 ENV LOCAL_RESOURCES 2048,.5,1.0
-ENV BAZEL_VERSION 0.10.0
+ENV BAZEL_VERSION 0.20.0
 RUN apk add --no-cache python3 python3-tkinter py3-numpy py3-numpy-f2py freetype libpng libjpeg-turbo imagemagick graphviz git
 RUN apk add --no-cache --virtual=.build-deps \
         bash \
@@ -46,11 +46,24 @@ RUN cd bazel-${BAZEL_VERSION} \
     && bash compile.sh \
     && cp -p output/bazel /usr/bin/
 
+# Download Tensorflow Dependencies
+RUN pip3 install -U \
+        pip \
+        six \
+        numpy \
+        wheel \
+        mock && \
+    pip3 install -U --no-deps \
+        keras_applications==1.0.5 \
+        keras_preprocessing==1.0.3
+
 # Download Tensorflow
-ENV TENSORFLOW_VERSION 1.7.0
+ENV TENSORFLOW_VERSION 1.11.0
 RUN cd /tmp \
     && curl -SL https://github.com/tensorflow/tensorflow/archive/v${TENSORFLOW_VERSION}.tar.gz \
         | tar xzf -
+
+ARG BAZEL_ARGS="--curses=yes --color=yes --incompatible_remove_native_http_archive=false"
 
 # Build Tensorflow
 RUN cd /tmp/tensorflow-${TENSORFLOW_VERSION} \
@@ -73,7 +86,12 @@ RUN cd /tmp/tensorflow-${TENSORFLOW_VERSION} \
         TF_NEED_MPI=0 \
         bash configure
 RUN cd /tmp/tensorflow-${TENSORFLOW_VERSION} \
-    && bazel build -c opt --local_resources ${LOCAL_RESOURCES} //tensorflow/tools/pip_package:build_pip_package
+    && bazel build ${BAZEL_ARGS} -c opt //tensorflow/tools/pip_package:build_pip_package
+
+# Download Tensorflow Wheel Dependencies
+RUN apk add --repository http://dl-cdn.alpinelinux.org/alpine/edge/testing \
+    hdf5-dev
+
 RUN cd /tmp/tensorflow-${TENSORFLOW_VERSION} \
     && ./bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/tensorflow_pkg
 RUN cp /tmp/tensorflow_pkg/tensorflow-${TENSORFLOW_VERSION}-cp36-cp36m-linux_x86_64.whl /root
@@ -81,3 +99,4 @@ RUN cp /tmp/tensorflow_pkg/tensorflow-${TENSORFLOW_VERSION}-cp36-cp36m-linux_x86
 # Make sure it's built properly
 RUN pip3 install --no-cache-dir /root/tensorflow-${TENSORFLOW_VERSION}-cp36-cp36m-linux_x86_64.whl \
     && python3 -c 'import tensorflow'
+

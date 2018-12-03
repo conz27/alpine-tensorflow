@@ -11,8 +11,10 @@ RUN apk add --no-cache \
     c-ares-dev \
     libexecinfo-dev
 
+ARG BAZEL_EXTRA_ARGS="--copt=-fPIC --cxxopt=-fPIC --linkopt=-fPIE --linkopt=-pie"
+
 RUN cd /tmp/tensorflow-${TENSORFLOW_VERSION} && \
-    bazel build --curses=yes --color=yes tensorflow/examples/label_image/...
+    bazel build --curses=yes --color=yes ${BAZEL_EXTRA_ARGS} tensorflow/examples/label_image/...
 
 FROM alpine:3.8
 
